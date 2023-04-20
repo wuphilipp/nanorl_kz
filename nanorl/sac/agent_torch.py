@@ -24,10 +24,10 @@ class Temperature(nn.Module):
     def __init__(self, initial_temperature: float = 1.0) -> None:
         super(Temperature, self).__init__()
         self.initial_temperature = initial_temperature
-        self.log_temp = nn.Parameter(torch.tensor([initial_temperature]).log())
+        self.log_temp = nn.Parameter(torch.tensor([[initial_temperature]]).log(), requires_grad=True)
 
     def forward(self) -> torch.Tensor:
-        return torch.exp(self.log_temp)
+        return torch.mean(torch.exp(self.log_temp))
 
 
 
@@ -261,12 +261,12 @@ class SAC(nn.Module):
             mini_transition = Transition(*[slice(x) for x in transitions])
             actor_info = self.update_actor(mini_transition)
 
-        return self, {**actor_info, **critic_info}
-
+        # return self, {**actor_info, **critic_info}
+#
         # this breaks for me when using compile
-        # # Update temperature.
-        # temp_info = self.update_temperature(actor_info["entropy"])
-        # return self, {**actor_info, **critic_info, **temp_info}
+        # Update temperature.
+        temp_info = self.update_temperature(actor_info["entropy"])
+        return self, {**actor_info, **critic_info, **temp_info}
 
   # The error message
 
