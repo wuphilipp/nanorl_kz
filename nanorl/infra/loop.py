@@ -54,6 +54,8 @@ def train_loop(
         if i >= warmstart_steps:
             if replay_buffer.is_ready():
                 transitions = replay_buffer.sample()
+                if i <= warmstart_steps + 5:
+                    print(type(transitions.observation))
                 agent, metrics = agent.update(transitions)
                 if i % log_interval == 0:
                     experiment.log(utils.prefix_dict("train", metrics), step=i)
