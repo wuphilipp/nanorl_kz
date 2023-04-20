@@ -24,10 +24,10 @@ class Temperature(nn.Module):
     def __init__(self, initial_temperature: float = 1.0) -> None:
         super(Temperature, self).__init__()
         self.initial_temperature = initial_temperature
-        self.log_temp = nn.Parameter(torch.tensor([[initial_temperature]]).log(), requires_grad=True)
+        self.log_temp = nn.Parameter(torch.tensor([initial_temperature]).log())
 
     def forward(self) -> torch.Tensor:
-        return torch.mean(torch.exp(self.log_temp))
+        return torch.exp(self.log_temp)
 
 
 
