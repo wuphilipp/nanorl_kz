@@ -1,4 +1,4 @@
-"""Soft Actor-Critic implementation in torch."""
+
 import os
 
 import random
@@ -261,33 +261,8 @@ class SAC(nn.Module):
             mini_transition = Transition(*[slice(x) for x in transitions])
             actor_info = self.update_actor(mini_transition)
 
-        # return self, {**actor_info, **critic_info}
-#
-        # this breaks for me when using compile
-        # Update temperature.
         temp_info = self.update_temperature(actor_info["entropy"])
         return self, {**actor_info, **critic_info, **temp_info}
-
-  # The error message
-
-  # File "/home/philipp/nanorl_kz/nanorl/infra/utils.py", line 123, in _fn
-  #   return fn(**kwargs)
-  # File "/home/philipp/nanorl_kz/nanorl/infra/loop.py", line 57, in train_loop
-  #   agent, metrics = agent.update(transitions)
-  # File "/home/philipp/miniconda/envs/pianist/lib/python3.10/site-packages/torch/_dynamo/eval_frame.py", line 209, in _fn
-  #   return fn(*args, **kwargs)
-  # File "/home/philipp/nanorl_kz/nanorl/sac/agent_torch.py", line 242, in update
-  #   *[torch.as_tensor(x, dtype=torch.float32, device=self._device) for x in transitions]
-  # File "/home/philipp/nanorl_kz/nanorl/sac/agent_torch.py", line 265, in <graph break in update>
-  #   temp_info = self.update_temperature(actor_info["entropy"])
-  # File "/home/philipp/nanorl_kz/nanorl/sac/agent_torch.py", line 198, in update_temperature
-  #   temp_loss.backward()
-  # File "/home/philipp/miniconda/envs/pianist/lib/python3.10/site-packages/torch/_tensor.py", line 487, in backward
-  #   torch.autograd.backward(
-  # File "/home/philipp/miniconda/envs/pianist/lib/python3.10/site-packages/torch/autograd/__init__.py", line 200, in backward
-  #   Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
-  # RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
-
 
     @torch.compile(mode="max-autotune") # does not seem to make a difference
     def sample_actions(self, observations: np.ndarray) -> Tuple["SAC", np.ndarray]:
