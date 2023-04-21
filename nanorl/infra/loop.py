@@ -1,4 +1,8 @@
 import time
+import jax
+import jax.numpy  as jnp
+import torch
+from nanorl.types import LogDict, Transition
 from pathlib import Path
 from typing import Any, Callable
 
@@ -37,11 +41,47 @@ def train_loop(
     replay_buffer.insert(timestep, None)
 
     start_time = time.time()
+    if hasattr(agent, "_device"):
+        transitions = Transition(
+            observation=torch.zeros(replay_buffer._batch_size, 24, device=agent._device),
+            action=torch.zeros(replay_buffer._batch_size, 6, device=agent._device),
+            reward=torch.zeros(replay_buffer._batch_size, device=agent._device),
+            discount=torch.zeros(replay_buffer._batch_size, device=agent._device),
+            next_observation=torch.zeros(replay_buffer._batch_size, 24, device=agent._device),
+        )
+    else:
+        transitions = Transition(
+            observation=jnp.zeros((replay_buffer._batch_size, 24)),
+            action=jnp.zeros((replay_buffer._batch_size, 6)),
+            reward=jnp.zeros((replay_buffer._batch_size,)),
+            discount=jnp.zeros((replay_buffer._batch_size,)),
+            next_observation=jnp.zeros((replay_buffer._batch_size, 24,)),
+        )
+
     for i in tqdm.tqdm(range(1, max_steps + 1), disable=not tqdm_bar):
         if i < warmstart_steps:
             action = spec.sample_action(random_state=env.random_state)
         else:
-            agent, action = agent.sample_actions(timestep.observation)
+            # _transitions = replay_buffer.sample()
+            # c_transitions.observation[:] = torch.tensor(_transitions.observation)
+            # c_transitions.action[:] = torch.tensor(_transitions.action)
+            # c_transitions.reward[:] = torch.tensor(_transitions.reward)
+            # c_transitions.discount[:] = torch.tensor(_transitions.discount)
+            # c_transitions.next_observation[:] = torch.tensor(_transitions.next_observation)
+            # # if hasattr(agent, "_device"):
+            # #     transitions = Transition(
+            # #         *[torch.tensor(x, dtype=torch.float32).to(agent._device, non_blocking=True) for x in transitions]
+            # #     )
+            # transitions = Transition(
+            #     observation=c_transitions.observation.to(agent._device, non_blocking=True),
+            #     action=c_transitions.action.to(agent._device, non_blocking=True),
+            #     reward=c_transitions.reward.to(agent._device, non_blocking=True),
+            #     discount=c_transitions.discount.to(agent._device, non_blocking=True),
+            #     next_observation=c_transitions.next_observation.to(agent._device, non_blocking=True),
+            # )
+
+            # agent, action = agent.sample_actions(timestep.observation)
+            pass
 
         timestep = env.step(action)
         replay_buffer.insert(timestep, action)
@@ -51,10 +91,20 @@ def train_loop(
             timestep = env.reset()
             replay_buffer.insert(timestep, None)
 
+        update_time = 0
         if i >= warmstart_steps:
             if replay_buffer.is_ready():
-                transitions = replay_buffer.sample()
+                if hasattr(agent, "_device"):
+                    torch.cuda.synchronize()
+                else:
+                    (jax.device_put(0.) + 0).block_until_ready()
+                _s_time =time.time()
                 agent, metrics = agent.update(transitions)
+                update_time = time.time() - _s_time
+                if hasattr(agent, "_device"):
+                    torch.cuda.synchronize()
+                else:
+                    (jax.device_put(0.) + 0).block_until_ready()
                 if i % log_interval == 0:
                     experiment.log(utils.prefix_dict("train", metrics), step=i)
 
@@ -62,7 +112,11 @@ def train_loop(
             experiment.save_checkpoint(agent, step=i)
 
         if i % log_interval == 0:
-            experiment.log({"train/fps": int(i / (time.time() - start_time))}, step=i)
+            experiment.log(
+                {
+                    "train/fps": int(i / (time.time() - start_time)),
+                    "train/update_time": update_time
+                }, step=i)
 
         if resets and i % reset_interval == 0:
             agent = agent_fn(env)

@@ -1,4 +1,4 @@
-"""Soft Actor-Critic implementation in torch."""
+
 import os
 
 import random
@@ -95,11 +95,6 @@ class SAC(nn.Module):
         target_critic.to(device)
         temperature.to(device)
 
-        if os.getenv("TORCH_COMPILE", "0") == "1":
-            actor = torch.compile(actor)
-            critic = torch.compile(critic)
-            target_critic = torch.compile(target_critic)
-
         actor_optimizer = torch.optim.Adam(actor.parameters(), lr=config.actor_lr)
         critic_optimizer = torch.optim.Adam(critic.parameters(), lr=config.critic_lr)
         temp_optimizer = torch.optim.Adam(temperature.parameters(), lr=config.temp_lr)
@@ -171,6 +166,7 @@ class SAC(nn.Module):
     def actor_utd_ratio(self) -> int:
         return self._actor_utd_ratio
 
+    @torch.compile(mode="max-autotune")
     def update_actor(self, transitions: Transition) -> LogDict:
         """Update the actor."""
         dist = self._actor(transitions.observation)
@@ -199,6 +195,7 @@ class SAC(nn.Module):
         self._temp_optimizer.step()
         return {"temperature": temp.item(), "temperature_loss": temp_loss.item()}
 
+    @torch.compile(mode="max-autotune")
     def update_critic(self, transitions: Transition) -> LogDict:
         """
         Update the critic.
@@ -222,14 +219,15 @@ class SAC(nn.Module):
         critic_loss.backward()
         self._critic_optimizer.step()
 
-        def incremental_update(ac, ac_targ, polyak_tau):
-            with torch.no_grad():
-                for param, target_param in zip(ac.parameters(), ac_targ.parameters()):
-                    target_param.data.copy_(
-                        polyak_tau * param.data + (1 - polyak_tau) * target_param.data
-                    )
+        with torch.no_grad():
+            def incremental_update(ac, ac_targ, polyak_tau):
+                with torch.no_grad():
+                    for param, target_param in zip(ac.parameters(), ac_targ.parameters()):
+                        target_param.data.copy_(
+                            polyak_tau * param.data + (1 - polyak_tau) * target_param.data
+                        )
 
-        incremental_update(self._critic, self._target_critic, self._tau)
+            incremental_update(self._critic, self._target_critic, self._tau)
         return {"critic_loss": critic_loss.item(), "q": qs.mean().item()}
 
     def update(self, transitions: Transition) -> Tuple["SAC", LogDict]:
@@ -259,17 +257,16 @@ class SAC(nn.Module):
             mini_transition = Transition(*[slice(x) for x in transitions])
             actor_info = self.update_actor(mini_transition)
 
-        # Update temperature.
         temp_info = self.update_temperature(actor_info["entropy"])
-
         return self, {**actor_info, **critic_info, **temp_info}
 
-    @torch.no_grad()
+    @torch.compile(mode="max-autotune") # does not seem to make a difference
     def sample_actions(self, observations: np.ndarray) -> Tuple["SAC", np.ndarray]:
-        t_observations = torch.from_numpy(observations).float().to(self._device)
-        dist = self._actor(t_observations)
-        actions = dist.sample()
-        return self, actions.cpu().detach().numpy()
+        with torch.no_grad():
+            t_observations = torch.from_numpy(observations).float().to(self._device)
+            dist = self._actor(t_observations)
+            actions = dist.sample()
+            return self, actions.cpu().detach().numpy()
 
     @torch.no_grad()
     def eval_actions(self, observations: np.ndarray) -> Tuple["SAC", np.ndarray]:
