@@ -95,11 +95,6 @@ class SAC(nn.Module):
         target_critic.to(device)
         temperature.to(device)
 
-        if os.getenv("TORCH_COMPILE", "0") == "1":
-            actor = torch.compile(actor)
-            critic = torch.compile(critic)
-            target_critic = torch.compile(target_critic)
-
         actor_optimizer = torch.optim.Adam(actor.parameters(), lr=config.actor_lr)
         critic_optimizer = torch.optim.Adam(critic.parameters(), lr=config.critic_lr)
         temp_optimizer = torch.optim.Adam(temperature.parameters(), lr=config.temp_lr)
@@ -171,6 +166,7 @@ class SAC(nn.Module):
     def actor_utd_ratio(self) -> int:
         return self._actor_utd_ratio
 
+    # @torch.compile(mode="max-autotune")
     def update_actor(self, transitions: Transition) -> LogDict:
         """Update the actor."""
         dist = self._actor(transitions.observation)
@@ -199,6 +195,7 @@ class SAC(nn.Module):
         self._temp_optimizer.step()
         return {"temperature": temp.item(), "temperature_loss": temp_loss.item()}
 
+    # @torch.compile(mode="max-autotune")
     def update_critic(self, transitions: Transition) -> LogDict:
         """
         Update the critic.
