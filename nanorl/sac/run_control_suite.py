@@ -194,8 +194,8 @@ def main(args: Args) -> None:
         checkpoint_interval=args.checkpoint_interval,
         resets=args.resets,
         reset_interval=args.reset_interval,
-        # tqdm_bar=args.tqdm_bar,
-        tqdm_bar=False,
+        tqdm_bar=args.tqdm_bar,
+        # tqdm_bar=False,
     )
 
     # Continuously monitor for checkpoints and evaluate.
