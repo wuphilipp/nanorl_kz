@@ -1,9 +1,11 @@
-"""Neural network module."""
+
 
 import math
 from typing import Callable, Optional, Sequence, Type, Union
 
+
 import torch
+from torch.func import stack_module_state, vmap
 import torch.distributions as td
 import torch.nn as nn
 
@@ -83,6 +85,7 @@ class StateActionValue(nn.Module):
         return torch.squeeze(value, -1)
 
 
+# runs and is correct but run sequentially
 class Ensemble(nn.Module):
     def __init__(self, net_cls: Callable[[], nn.Module], num: int = 2):
         super().__init__()
@@ -91,6 +94,39 @@ class Ensemble(nn.Module):
     def forward(self, *args):
         output = [module(*args) for module in self._module_ensemble]
         return torch.stack(output, dim=0)
+
+# runs but parameters of the ensemble are not updated
+# class Ensemble(nn.Module):
+#     def __init__(self, net_cls: Callable[[], nn.Module], num: int = 2):
+#         super().__init__()
+#         self._module_ensemble = nn.ModuleList([net_cls() for _ in range(num)])
+#         def wrapper(params, buffers, data):
+#             return torch.func.functional_call(self._module_ensemble[0], (params, buffers), data)
+#         self._wrapper = wrapper
+#
+#     def forward(self, *args):
+#         _params, _buffer = stack_module_state(self._module_ensemble)
+#         output = vmap(self._wrapper, (0, 0, None), randomness="different")(_params, _buffer, args)
+#         return output
+
+# seems more correct but does not run (due to some naming constraint)
+# KeyError: 'parameter name can\'t contain "."'
+# class Ensemble(nn.Module):
+#     def __init__(self, net_cls: Callable[[], nn.Module], num: int = 2):
+#         super().__init__()
+#         self._module_ensemble = nn.ModuleList([net_cls() for _ in range(num)])
+#         def wrapper(params, buffers, data):
+#             return torch.func.functional_call(self._module_ensemble[0], (params, buffers), data)
+#         self._wrapper = wrapper
+#
+#         _p, self._buffer = stack_module_state(self._module_ensemble)
+#         self._params = torch.nn.ParameterDict(
+#             {k: nn.Parameter(v) for k, v in _p.items()}
+#         )
+#
+#     def forward(self, *args):
+#         output = vmap(self._wrapper, (0, 0, None), randomness="different")(self._params, self._buffer, args)
+#         return output
 
 
 class TanhTransform(td.transforms.Transform):
